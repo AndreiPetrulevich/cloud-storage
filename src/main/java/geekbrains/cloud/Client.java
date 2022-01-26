@@ -4,6 +4,7 @@ import java.io.*;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Function;
 
@@ -80,12 +81,16 @@ public class Client {
 
                 FileInputStream fileInput = new FileInputStream(file);
 
-                if (Files.size(file.toPath()) < Integer.MAX_VALUE) {
-                    os.writeLong(Files.size(file.toPath()));
-                    byte[] buffer = new byte[8190];
+                Path filePath = file.toPath();
+                long size = Files.size(filePath);
+
+                if ((int)(size) < Integer.MAX_VALUE) {
+                    os.writeLong(size);
+                    byte[] buffer = Files.readAllBytes(filePath);
                     while (fileInput.read(buffer) != -1) {
                         os.write(buffer);
                     }
+                    os.flush();
                 }
 
             }

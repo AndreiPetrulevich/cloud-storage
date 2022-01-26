@@ -2,11 +2,12 @@ package geekbrains.cloud;
 
 import java.io.*;
 import java.net.Socket;
-import java.nio.charset.Charset;
+import java.util.Optional;
 import java.util.UUID;
 
 public class Handler implements Runnable, Closeable {
     private final Socket socket;
+    private static final int SIZE = 2048;
 
     public Handler(Socket socket) {
         this.socket = socket;
@@ -32,19 +33,23 @@ public class Handler implements Runnable, Closeable {
                         long totalBytes = is.readLong();
 
                         UUID fileUUID = UUID.randomUUID();
+                        Optional<String> extension = getExtension(filename);
 
-                        FileOutputStream fileInput = new FileOutputStream(fileUUID.toString());
+                        FileOutputStream fileInput = new FileOutputStream(fileUUID.toString() + extension.orElse(""));
 
-                        long readBytes = 0;
+                        int readBytes = 0;
                         while (readBytes < totalBytes) {
-                            byte[] buffer = is.readNBytes(8190);
+                            int bytesLeft = (int)totalBytes - readBytes;
+                            int size = Integer.min(bytesLeft, SIZE);
+                            byte[] buffer = is.readNBytes(size);
                             readBytes += buffer.length;
-                            if(buffer.length > 0) {
-                                fileInput.write(buffer);
-                            }
+
+                            fileInput.write(buffer);
                         }
+
                         os.writeInt(MessageType.TEXT.getRawValue());
                         os.writeUTF("File sent: " + filename);
+                        os.flush();
                     }
                 }
             }
@@ -56,6 +61,11 @@ public class Handler implements Runnable, Closeable {
 
     }
 
+    public Optional<String> getExtension(String filename) {
+        return Optional.ofNullable(filename)
+                .filter(f -> f.contains("."))
+                .map(f -> f.substring(filename.lastIndexOf(".")));
+    }
 
     @Override
     public void close() throws IOException {
