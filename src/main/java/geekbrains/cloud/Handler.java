@@ -1,14 +1,13 @@
 package geekbrains.cloud;
 
-import java.awt.*;
 import java.io.*;
 import java.net.Socket;
-import java.nio.charset.Charset;
+import java.util.Optional;
 import java.util.UUID;
-import java.util.logging.Logger;
 
 public class Handler implements Runnable, Closeable {
     private final Socket socket;
+    private static final int SIZE = 2048;
 
     public Handler(Socket socket) {
         this.socket = socket;
@@ -26,29 +25,31 @@ public class Handler implements Runnable, Closeable {
                         System.out.println("Received text message:" + msg);
                         os.writeInt(MessageType.TEXT.getRawValue());
                         os.writeUTF(msg);
+                        os.flush();
                     }
                     case FILE -> {
-                        int filenameLength = is.readInt();
-                        byte[] filenameBytes = is.readNBytes(filenameLength);
-                        String filename = new String(filenameBytes, Charset.forName("utf-8"));
+                        String filename = is.readUTF();
+                        System.out.println(filename);
                         long totalBytes = is.readLong();
 
                         UUID fileUUID = UUID.randomUUID();
+                        Optional<String> extension = getExtension(filename);
 
-                        FileOutputStream fileInput = new FileOutputStream(fileUUID.toString());
+                        FileOutputStream fileInput = new FileOutputStream(fileUUID.toString() + extension.orElse(""));
 
-                        byte[] buffer;
-                        long readBytes = 0;
-                        do {
-                            buffer = is.readNBytes(8190);
+                        int readBytes = 0;
+                        while (readBytes < totalBytes) {
+                            int bytesLeft = (int)totalBytes - readBytes;
+                            int size = Integer.min(bytesLeft, SIZE);
+                            byte[] buffer = is.readNBytes(size);
                             readBytes += buffer.length;
-                            if(buffer.length > 0) {
-                                fileInput.write(buffer);
-                            }
-                            if(readBytes == totalBytes) {
-                                break;
-                            }
-                        } while (buffer.length > 0);
+
+                            fileInput.write(buffer);
+                        }
+
+                        os.writeInt(MessageType.TEXT.getRawValue());
+                        os.writeUTF("File sent: " + filename);
+                        os.flush();
                     }
                 }
             }
@@ -60,6 +61,11 @@ public class Handler implements Runnable, Closeable {
 
     }
 
+    public Optional<String> getExtension(String filename) {
+        return Optional.ofNullable(filename)
+                .filter(f -> f.contains("."))
+                .map(f -> f.substring(filename.lastIndexOf(".")));
+    }
 
     @Override
     public void close() throws IOException {
